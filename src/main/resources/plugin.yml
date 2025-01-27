@@ -1,0 +1,4 @@
+name: PlayerObfuscator
+version: '${project.version}'
+main: org.dimasik.playerobfuscator.PlayerObfuscator
+api-version: '1.16'
