@@ -1,5 +1,11 @@
 package org.dimasik.playerobfuscator;
 
+import com.Zrips.CMI.CMI;
+import com.Zrips.CMI.Containers.CMIUser;
+import com.Zrips.CMI.Containers.CMIVanish;
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.events.PacketAdapter;
+import com.comphenix.protocol.events.PacketEvent;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.WorldEditException;
@@ -33,6 +39,7 @@ import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.wrappers.*;
 import me.clip.placeholderapi.PlaceholderAPI;
 import org.bukkit.*;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -41,6 +48,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -56,6 +64,8 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
     private ProtocolManager protocolManager;
     private final Map<UUID, Set<UUID>> hiddenPlayersMap = new HashMap<>(); // Карта для хранения скрытых игроков
 
+    private boolean isWorldGuardInitialized = false; // Флаг для отслеживания инициализации WorldGuard
+
     @Override
     public void onEnable() {
         // Инициализируем ProtocolLib
@@ -68,6 +78,9 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
+                if (Bukkit.getOnlinePlayers().size() == 0) {
+                    return;
+                }
                 for (Player viewer : Bukkit.getOnlinePlayers()) {
                     for (Player target : Bukkit.getOnlinePlayers()) {
                         if (viewer == target) continue; // Игрок не должен скрывать себя
@@ -104,6 +117,27 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
             }
         }
         hiddenPlayersMap.clear();
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        // Инициализируем WorldGuard только при первом входе игрока
+        if (!isWorldGuardInitialized) {
+            initializeWorldGuard();
+            isWorldGuardInitialized = true; // Устанавливаем флаг, чтобы больше не инициализировать
+        }
+    }
+
+    /**
+     * Инициализирует WorldGuard.
+     */
+    private void initializeWorldGuard() {
+        if (Bukkit.getPluginManager().getPlugin("WorldGuard") == null) {
+            getLogger().severe("WorldGuard не найден! Некоторые функции будут недоступны.");
+            return;
+        }
+
+        getLogger().info("WorldGuard успешно инициализирован!");
     }
 
     @EventHandler
@@ -182,10 +216,6 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
      * @param target Игрок, которого нужно скрыть.
      */
     private void hidePlayer(Player viewer, Player target) {
-        if(target.hasPotionEffect(PotionEffectType.GLOWING)){
-            return;
-        }
-
         if(!canPvp(viewer.getLocation()) || !canPvp(target.getLocation())){
             return;
         }
@@ -237,13 +267,14 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
      * @param target Игрок, которого нужно показать.
      */
     private void showPlayer(Player viewer, Player target) {
-        if(target.getGameMode() == GameMode.SPECTATOR){
+        if (target.getGameMode() == GameMode.SPECTATOR) {
             return;
         }
 
-        if(isVanished(target)){
+        if (isVanished(target)) {
             return;
         }
+
         // Получаем множество зрителей, для которых скрыт target
         Set<UUID> hiddenFor = hiddenPlayersMap.get(target.getUniqueId());
 
@@ -288,6 +319,9 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
 
         // Обновляем броню для показа
         sendPacketArmor(target, viewer, target.getInventory().getArmorContents());
+
+        // Обновляем предметы в руках
+        sendPacketHandItems(target, viewer);
     }
 
     /**
@@ -313,6 +347,33 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
 
         try {
             protocolManager.sendServerPacket(viewer, playerInfoPacket);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }/**
+     * Отправляет пакеты для обновления предметов в руках игрока.
+     *
+     * @param target    Игрок, чьи предметы обновляются.
+     * @param receiver  Игрок, который видит изменения.
+     */
+    private void sendPacketHandItems(Player target, Player receiver) {
+        try {
+            // Создаем список пар (слот, предмет)
+            List<Pair<EnumWrappers.ItemSlot, ItemStack>> slotStackPairs = new ArrayList<>();
+
+            // Заполняем список парами для основной и дополнительной руки
+            slotStackPairs.add(new Pair<>(EnumWrappers.ItemSlot.MAINHAND, target.getInventory().getItemInMainHand())); // Основная рука
+            slotStackPairs.add(new Pair<>(EnumWrappers.ItemSlot.OFFHAND, target.getInventory().getItemInOffHand())); // Дополнительная рука
+
+            // Создаем пакет
+            PacketContainer handItemsPacket = protocolManager.createPacket(com.comphenix.protocol.PacketType.Play.Server.ENTITY_EQUIPMENT);
+            handItemsPacket.getIntegers().write(0, target.getEntityId()); // ID сущности
+
+            // Записываем список пар в пакет
+            handItemsPacket.getSlotStackPairLists().write(0, slotStackPairs);
+
+            // Отправляем пакет
+            protocolManager.sendServerPacket(receiver, handItemsPacket);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -411,6 +472,10 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
             return true; // Если расстояние <= 1 блок, игрок виден
         }
 
+        if(target.hasPotionEffect(PotionEffectType.GLOWING)){
+            return true;
+        }
+
         // Проверка угла между направлением взгляда зрителя и вектором к целевому игроку
         Location viewerLocation = viewer.getEyeLocation();
         Location targetLocation = target.getLocation();
@@ -482,10 +547,8 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
      * @return true, если игрок скрыт, иначе false.
      */
     private boolean isVanished(Player player) {
-        if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI") && Bukkit.getPluginManager().isPluginEnabled("CMI")) {
-            // Используем PlaceholderAPI для проверки vanish через CMI
-            String vanishStatus = PlaceholderAPI.setPlaceholders(player, "%cmi_user_vanished%");
-            return vanishStatus.equalsIgnoreCase("true");
+        if (Bukkit.getPluginManager().isPluginEnabled("CMI")) {
+            return CMIUser.getUser(player).isVanished();
         }
         return false;
     }
@@ -500,18 +563,14 @@ public final class PlayerObfuscator extends JavaPlugin implements Listener {
         String materialName = material.name().toUpperCase();
 
         // Проверяем, содержит ли название материала ключевые слова, связанные с полупрозрачными блоками
-        return /* materialName.contains("GLASS") || // Все виды стекол
-                materialName.contains("SLAB") || // Полублоки
-                materialName.contains("STAIRS") || // Лестницы
-                materialName.contains("FENCE") || // Заборы
-                materialName.contains("WALL") || // Стены
+        return materialName.contains("GLASS") ||
                 materialName.equals("IRON_BARS") || // Железные решетки
-                materialName.contains("ICE") || // Лед
-                materialName.contains("WATER") || // Вода
-                materialName.contains("LAVA") || // Лава
+                materialName.equals("ICE") || // Лава
                 materialName.contains("LEAVES") || // Лава
+                materialName.contains("FENCE") || // Лава
                 materialName.equals("CAKE") || // Лава
-                materialName.equals("DIRT_PATH") || // Лава */
+                materialName.equals("DIRT_PATH") || // Лава
+                materialName.equals("DRAGON_EGG") || // Лава
                 material.isTransparent(); // Другие полупрозрачные блоки
     }
 }

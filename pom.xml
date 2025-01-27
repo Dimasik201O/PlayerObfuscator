@@ -12,7 +12,7 @@
   <name>PlayerObfuscator</name>
 
   <properties>
-    <java.version>1.8</java.version>
+    <java.version>16</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -55,8 +55,16 @@
           <url>https://repo.papermc.io/repository/maven-public/</url>
       </repository>
       <repository>
+          <id>sk89q-repo</id>
+          <url>https://maven.enginehub.org/repo/</url>
+      </repository>
+      <repository>
           <id>sonatype</id>
           <url>https://oss.sonatype.org/content/groups/public/</url>
+      </repository>
+      <repository>
+          <id>dmulloy2-repo</id>
+          <url>https://repo.dmulloy2.net/repository/public/</url>
       </repository>
   </repositories>
 
@@ -65,6 +73,12 @@
           <groupId>com.destroystokyo.paper</groupId>
           <artifactId>paper-api</artifactId>
           <version>1.16.5-R0.1-SNAPSHOT</version>
+          <scope>provided</scope>
+      </dependency>
+      <dependency>
+          <groupId>com.comphenix.protocol</groupId>
+          <artifactId>ProtocolLib</artifactId>
+          <version>5.1.0</version>
           <scope>provided</scope>
       </dependency>
   </dependencies>
