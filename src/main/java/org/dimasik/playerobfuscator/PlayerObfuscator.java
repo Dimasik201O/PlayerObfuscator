@@ -60,7 +60,6 @@ import org.bukkit.util.Vector;
 import java.util.*;
 
 public final class PlayerObfuscator extends JavaPlugin implements Listener {
-
     private ProtocolManager protocolManager;
     private final Map<UUID, Set<UUID>> hiddenPlayersMap = new HashMap<>();
 
