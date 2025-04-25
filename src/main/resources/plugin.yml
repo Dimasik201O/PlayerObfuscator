@@ -3,4 +3,4 @@ version: '${project.version}'
 main: org.dimasik.playerobfuscator.PlayerObfuscator
 api-version: '1.16'
 dependencies: [ProtocolLib, WorldEdit, WorldGuard, PlaceholderAPI]
-softdepend: [WorldGuard, CMI]
+softdepend: [WorldGuard, CMI, Flag, ProtocolLibrary]
